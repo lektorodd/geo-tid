@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="nn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tidsreisa</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #0c1427;
+            color: #f0f4f8;
+        }
+        .font-jetbrains {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        #game-scroll-area {
+            height: 60vh;
+            overflow-y: scroll;
+            position: relative;
+            border: 2px solid #334155;
+            border-radius: 1rem;
+            background: #0f172a;
+        }
+        #game-scroll-area::-webkit-scrollbar { width: 12px; }
+        #game-scroll-area::-webkit-scrollbar-track { background: #1e2b3a; border-radius: 10px; }
+        #game-scroll-area::-webkit-scrollbar-thumb { background-color: #64748b; border-radius: 10px; border: 3px solid #1e2b3a; }
+        
+        .timeline-container {
+            position: relative;
+            width: 100%;
+            height: 5000px;
+            cursor: crosshair;
+        }
+        .timeline-line {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 100%;
+            background: linear-gradient(to bottom, #e2e8f0, #94a3b8);
+            z-index: 5;
+        }
+        .era-section {
+            position: absolute;
+            width: 100%;
+            left: 0;
+        }
+        .era-label {
+            position: sticky;
+            top: 10px; /* Stick to the top of the scroll container */
+            left: 20px;
+            background-color: rgba(30, 41, 59, 0.9);
+            backdrop-filter: blur(5px);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 1.2rem;
+            color: #e2e8f0;
+            z-index: 25;
+        }
+        .timeline-tick {
+            position: absolute;
+            left: 50%;
+            width: 20px;
+            height: 2px;
+            background-color: #94a3b8;
+            transform: translateX(-50%);
+            z-index: 6;
+        }
+        .timeline-label {
+            position: absolute;
+            left: 52%;
+            transform: translateY(-50%);
+            color: #94a3b8;
+            font-size: 0.8rem;
+            z-index: 6;
+        }
+        .feedback-timeline {
+            position: relative;
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+        }
+        .feedback-marker {
+            position: absolute;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 3px solid white;
+        }
+        .feedback-label {
+            position: absolute;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            white-space: pre;
+            text-align: center;
+            line-height: 1.2;
+            color: white;
+            /* transform will be set inline */
+        }
+        .feedback-label.top {
+            bottom: 25px;
+        }
+        .feedback-label.bottom {
+            top: 25px;
+        }
+        .feedback-line {
+            position: absolute;
+            height: 4px;
+            top: calc(50% - 2px);
+            background-color: #f87171;
+            opacity: 0.8;
+        }
+        #guess-indicator {
+            position: absolute;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 24px;
+            height: 24px;
+            border: 3px solid #facc15;
+            border-radius: 50%;
+            background-color: rgba(250, 204, 21, 0.2);
+            z-index: 20;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+        #progress-bar {
+            width: 100%;
+            transition: width 3s linear;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-between min-h-screen p-4">
+
+    <div class="w-full max-w-5xl mx-auto">
+        <div class="bg-slate-800/70 backdrop-blur-sm p-6 sm:p-8 rounded-3xl shadow-2xl border border-slate-700">
+            <div class="text-center mb-4">
+                <h1 class="text-3xl sm:text-5xl font-bold text-white">Tidsreisa</h1>
+                <p id="subtitle" class="text-slate-400 mt-2 text-lg">Kvar i historia skjedde dette?</p>
+            </div>
+
+            <div id="game-area">
+                <div id="current-card-display" class="min-h-[100px] flex flex-col items-center justify-center bg-slate-900/80 rounded-2xl p-4 mb-4 transition-opacity duration-300"></div>
+                
+                <div id="game-scroll-area">
+                    <div class="timeline-container" id="timeline-container">
+                        <div class="timeline-line"></div>
+                        <div id="guess-indicator" class="opacity-0"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="summary-container" class="hidden"></div>
+            
+            <div class="mt-6 text-center">
+                <p class="text-xl font-medium">Total poengsum: <span id="total-score" class="font-bold text-indigo-400 text-2xl">0</span></p>
+                <button id="reset-button" class="mt-2 px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors hidden">Spel igjen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feedback Modal -->
+    <div id="feedback-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="relative w-full max-w-4xl bg-slate-900/90 backdrop-blur-sm border border-slate-700 rounded-2xl py-16 px-8 flex flex-col justify-center overflow-hidden min-h-[220px]">
+            <div id="feedback-timeline" class="feedback-timeline w-11/12 mx-auto"></div>
+            <div class="flex justify-between items-center mt-12 pt-2 text-sm w-11/12 mx-auto">
+                <span id="feedback-points" class="font-bold text-green-400"></span>
+                <span id="feedback-difference" class="font-bold text-yellow-400"></span>
+            </div>
+            <div id="progress-bar" class="absolute bottom-0 left-0 h-1 bg-yellow-400/70"></div>
+        </div>
+    </div>
+
+    <footer class="text-center p-4 text-slate-500 font-jetbrains">
+        <a href="https://lektorodd.no" target="_blank" class="hover:text-slate-300 transition-colors">lektorodd</a>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const events = [
+                { id: 11, name: 'Jordskorpa storknar', year: 4400, icon: '🧊' },
+                { id: 2, name: 'Første tegn til liv', year: 3800, icon: '🦠' },
+                { id: 3, name: 'Fotosyntese blir utvikla', year: 3400, icon: '🌿' },
+                { id: 4, name: 'Noregs eldste bergart', year: 3002, icon: '🪨' },
+                { id: 5, name: 'Første plantar på land', year: 470, icon: '🌱' },
+                { id: 6, name: 'Den kaledonske fjellkjeda blir danna', year: 425, icon: '🏔️' },
+                { id: 7, name: 'Superkontinentet Pangea', year: 335, icon: '🗺️' },
+                { id: 8, name: 'Første dinosaurar', year: 230, icon: '🦖' },
+                { id: 9, name: 'Utryddinga av dinosaurane', year: 66, icon: '☄️' },
+                { id: 10, name: 'Første moderne menneske', year: 0.3, icon: '🧑‍🔬' },
+            ];
+
+            const gameScrollArea = document.getElementById('game-scroll-area');
+            const timelineContainer = document.getElementById('timeline-container');
+            const currentCardDisplay = document.getElementById('current-card-display');
+            const totalScoreEl = document.getElementById('total-score');
+            const resetButton = document.getElementById('reset-button');
+            const feedbackModal = document.getElementById('feedback-modal');
+            const feedbackTimeline = document.getElementById('feedback-timeline');
+            const feedbackPointsEl = document.getElementById('feedback-points');
+            const feedbackDifferenceEl = document.getElementById('feedback-difference');
+            const gameArea = document.getElementById('game-area');
+            const summaryContainer = document.getElementById('summary-container');
+            const subtitle = document.getElementById('subtitle');
+            const progressBar = document.getElementById('progress-bar');
+            
+            let totalScore = 0;
+            let shuffledEvents = [];
+            let currentEventIndex = 0;
+            let canGuess = true;
+            let guessResults = [];
+
+            const TOTAL_HEIGHT = 5000;
+            const eras = [
+                { name: 'Prekambrium', start: 4600, end: 541, top: 0, height: 2500, color: ['#1e293b', '#1d4ed8'] },
+                { name: 'Paleozoikum', start: 541, end: 252, top: 2500, height: 1000, color: ['#1d4ed8', '#7f1d1d'] },
+                { name: 'Mesozoikum', start: 252, end: 66, top: 3500, height: 800, color: ['#7f1d1d', '#b45309'] },
+                { name: 'Kenozoikum', start: 66, end: 0, top: 4300, height: 700, color: ['#b45309', '#facc15'] },
+            ];
+
+            function yearToPixel(year) {
+                const era = eras.find(e => year <= e.start && year >= e.end);
+                if (!era) return TOTAL_HEIGHT;
+                const timeSpanInEra = era.start - era.end;
+                const progressInEra = (era.start - year) / timeSpanInEra;
+                return era.top + (progressInEra * era.height);
+            }
+
+            function pixelToYear(pixelY) {
+                const clampedY = Math.max(0, Math.min(pixelY, TOTAL_HEIGHT));
+                const era = eras.find(e => clampedY >= e.top && clampedY < e.top + e.height);
+                if (!era) {
+                    if (clampedY === TOTAL_HEIGHT) return 0;
+                    return 0;
+                }
+                const progressInPixels = (clampedY - era.top) / era.height;
+                const timeProgress = progressInPixels * (era.start - era.end);
+                return Math.round((era.start - timeProgress) * 10) / 10;
+            }
+
+            function getHorizontalAlignmentStyle(percent) {
+                const edgeThreshold = 10; // How close in % to an edge to be pushed away
+                if (percent < edgeThreshold) {
+                    return 'transform: translateX(5%); text-align: left;';
+                }
+                if (percent > 100 - edgeThreshold) {
+                    return 'transform: translateX(-105%); text-align: right;';
+                }
+                return 'transform: translateX(-50%); text-align: center;';
+            }
+
+            function initGame() {
+                totalScore = 0;
+                currentEventIndex = 0;
+                canGuess = true;
+                guessResults = [];
+                shuffledEvents = [...events].sort(() => Math.random() - 0.5);
+                
+                totalScoreEl.textContent = '0';
+                subtitle.textContent = "Kvar i historia skjedde dette?";
+                resetButton.classList.add('hidden');
+                feedbackModal.classList.add('opacity-0', 'pointer-events-none');
+                gameArea.style.display = 'block';
+                summaryContainer.style.display = 'none';
+                summaryContainer.innerHTML = '';
+                timelineContainer.innerHTML = '<div class="timeline-line"></div><div id="guess-indicator" class="opacity-0"></div>';
+
+                eras.forEach(era => {
+                    const section = document.createElement('div');
+                    section.className = 'era-section';
+                    section.style.top = `${era.top}px`;
+                    section.style.height = `${era.height}px`;
+                    section.style.background = `linear-gradient(to bottom, ${era.color[0]}, ${era.color[1]})`;
+                    const label = document.createElement('div');
+                    label.className = 'era-label';
+                    label.textContent = `${era.name} (${era.start} - ${era.end} mill. år)`;
+                    section.appendChild(label);
+                    timelineContainer.appendChild(section);
+                });
+
+                for (let year = 4600; year >= 0; year--) {
+                    let shouldPlaceTick = false;
+                    if (year > 541 && year % 250 === 0) shouldPlaceTick = true;
+                    else if (year <= 541 && year > 66 && year % 50 === 0) shouldPlaceTick = true;
+                    else if (year <= 66 && year > 0 && year % 10 === 0) shouldPlaceTick = true;
+                    else if (year === 0) shouldPlaceTick = true;
+
+                    if (shouldPlaceTick) {
+                        const yPos = yearToPixel(year);
+                        const tick = document.createElement('div');
+                        tick.className = 'timeline-tick';
+                        tick.style.top = `${yPos}px`;
+                        const label = document.createElement('div');
+                        label.className = 'timeline-label';
+                        label.style.top = `${yPos}px`;
+                        if (year >= 1000) label.textContent = `${year / 1000} mrd.`;
+                        else if (year > 0) label.textContent = `${year} mill.`;
+                        else label.textContent = `Notid`;
+                        timelineContainer.appendChild(tick);
+                        timelineContainer.appendChild(label);
+                    }
+                }
+                
+                const maxYear = 4600;
+                const gradientStops = eras.map(era => `${era.color[0]} ${((maxYear - era.start) / maxYear) * 100}%`).join(', ');
+                feedbackTimeline.style.background = `linear-gradient(to right, ${gradientStops}, ${eras[eras.length-1].color[1]} 100%)`;
+
+                displayNextEvent();
+            }
+
+            function displayNextEvent() {
+                if (currentEventIndex >= shuffledEvents.length) {
+                    endGame();
+                    return;
+                }
+                canGuess = true;
+                const event = shuffledEvents[currentEventIndex];
+                currentCardDisplay.style.opacity = '0';
+                setTimeout(() => {
+                    currentCardDisplay.innerHTML = `
+                        <div class="text-4xl">${event.icon}</div>
+                        <div class="text-xl font-bold text-slate-200">${event.name}</div>
+                    `;
+                    currentCardDisplay.style.opacity = '1';
+                }, 300);
+            }
+
+            function handleGuess(e) {
+                if (!canGuess) return;
+                canGuess = false;
+                
+                const indicator = document.getElementById('guess-indicator');
+                const guessY = parseFloat(indicator.style.top);
+                
+                const guessedYear = pixelToYear(guessY);
+                const correctEvent = shuffledEvents[currentEventIndex];
+                const correctYear = correctEvent.year;
+
+                const difference = Math.abs(correctYear - guessedYear);
+                const points = Math.max(0, 1000 - Math.round(difference * 2));
+                totalScore += points;
+                totalScoreEl.textContent = totalScore;
+                
+                guessResults.push({ event: correctEvent, guessedYear, difference, points });
+                showFeedback(guessedYear, correctYear, points, difference);
+
+                currentEventIndex++;
+                setTimeout(() => {
+                    feedbackModal.classList.add('opacity-0', 'pointer-events-none');
+                    displayNextEvent();
+                }, 3000);
+            }
+
+            function showFeedback(guessedYear, correctYear, points, difference) {
+                feedbackModal.classList.remove('opacity-0', 'pointer-events-none');
+                
+                feedbackTimeline.innerHTML = '';
+                const maxYear = 4600;
+                const guessPercent = (1 - (guessedYear / maxYear)) * 100;
+                const correctPercent = (1 - (correctYear / maxYear)) * 100;
+
+                const guessMarker = document.createElement('div');
+                guessMarker.className = 'feedback-marker bg-blue-500';
+                guessMarker.style.left = `${guessPercent}%`;
+                
+                const correctMarker = document.createElement('div');
+                correctMarker.className = 'feedback-marker bg-green-500';
+                correctMarker.style.left = `${correctPercent}%`;
+                
+                const line = document.createElement('div');
+                line.className = 'feedback-line';
+                line.style.left = `${Math.min(guessPercent, correctPercent)}%`;
+                line.style.width = `${Math.abs(guessPercent - correctPercent)}%`;
+
+                feedbackTimeline.appendChild(guessMarker);
+                feedbackTimeline.appendChild(correctMarker);
+                feedbackTimeline.appendChild(line);
+                
+                const guessLabel = document.createElement('div');
+                guessLabel.className = 'feedback-label bottom bg-blue-500';
+                guessLabel.innerHTML = `Ditt gjett\n(${guessedYear.toFixed(1)} mill. år)`;
+                guessLabel.style.cssText = `left: ${guessPercent}%; ${getHorizontalAlignmentStyle(guessPercent)}`;
+                
+                const correctLabel = document.createElement('div');
+                correctLabel.className = 'feedback-label top bg-green-500';
+                correctLabel.innerHTML = `Rett\n(${correctYear} mill. år)`;
+                correctLabel.style.cssText = `left: ${correctPercent}%; ${getHorizontalAlignmentStyle(correctPercent)}`;
+
+                feedbackTimeline.appendChild(guessLabel);
+                feedbackTimeline.appendChild(correctLabel);
+
+                feedbackPointsEl.textContent = `+${points} poeng`;
+                feedbackDifferenceEl.textContent = `Avstand: ${difference.toFixed(1)} mill. år`;
+                
+                progressBar.style.transition = 'none';
+                progressBar.style.width = '100%';
+                setTimeout(() => {
+                    progressBar.style.transition = 'width 3s linear';
+                    progressBar.style.width = '0%';
+                }, 10);
+            }
+
+            function endGame() {
+                gameArea.style.display = 'none';
+                summaryContainer.style.display = 'block';
+                subtitle.textContent = "Her er di oppsummering";
+
+                guessResults.sort((a, b) => b.points - a.points);
+                
+                let summaryHTML = '<div class="space-y-4">';
+                guessResults.forEach(result => {
+                    const maxYear = 4600;
+                    const guessPercent = (1 - (result.guessedYear / maxYear)) * 100;
+                    const correctPercent = (1 - (result.event.year / maxYear)) * 100;
+                    const gradientStops = eras.map(era => `${era.color[0]} ${((maxYear - era.start) / maxYear) * 100}%`).join(', ');
+                    const timelineBG = `linear-gradient(to right, ${gradientStops}, ${eras[eras.length-1].color[1]} 100%)`;
+
+                    const guessLabelStyle = getHorizontalAlignmentStyle(guessPercent);
+                    const correctLabelStyle = getHorizontalAlignmentStyle(correctPercent);
+
+                    summaryHTML += `
+                        <div class="bg-slate-900/80 p-4 rounded-lg">
+                            <h3 class="font-bold text-lg mb-3">${result.event.icon} ${result.event.name}</h3>
+                            <div class="relative h-24">
+                                <div class="feedback-timeline w-11/12 mx-auto absolute top-1/2 -translate-y-1/2" style="background: ${timelineBG};">
+                                    <div class="feedback-marker bg-blue-500" style="left: ${guessPercent}%"></div>
+                                    <div class="feedback-label bottom bg-blue-500" style="left: ${guessPercent}%; ${guessLabelStyle}">Ditt gjett\n(${result.guessedYear.toFixed(1)} mill. år)</div>
+                                    
+                                    <div class="feedback-marker bg-green-500" style="left: ${correctPercent}%"></div>
+                                    <div class="feedback-label top bg-green-500" style="left: ${correctPercent}%; ${correctLabelStyle}">Rett\n(${result.event.year} mill. år)</div>
+
+                                    <div class="feedback-line" style="left: ${Math.min(guessPercent, correctPercent)}%; width: ${Math.abs(guessPercent - correctPercent)}%;"></div>
+                                </div>
+                            </div>
+                            <div class="flex justify-between items-center mt-4 text-sm">
+                                <span class="font-bold text-green-400">+${result.points} poeng</span>
+                                <span class="font-bold text-yellow-400">Avstand: ${result.difference.toFixed(1)} mill. år</span>
+                            </div>
+                        </div>
+                    `;
+                });
+                summaryHTML += '</div>';
+                summaryContainer.innerHTML = summaryHTML;
+
+                resetButton.classList.remove('hidden');
+            }
+            
+            timelineContainer.addEventListener('mousemove', e => {
+                const indicator = document.getElementById('guess-indicator');
+                if (!indicator || !canGuess) return;
+                const rect = timelineContainer.getBoundingClientRect();
+                const mouseY = e.clientY - rect.top;
+                
+                const snapInterval = 5; // More precise snapping
+                const snappedY = Math.round(mouseY / snapInterval) * snapInterval;
+
+                indicator.style.top = `${snappedY}px`;
+                indicator.classList.remove('opacity-0');
+            });
+
+            timelineContainer.addEventListener('mouseleave', () => {
+                const indicator = document.getElementById('guess-indicator');
+                if (indicator) indicator.classList.add('opacity-0');
+            });
+
+
+            timelineContainer.addEventListener('click', handleGuess);
+            resetButton.addEventListener('click', initGame);
+            initGame();
+        });
+    </script>
+</body>
+</html>
